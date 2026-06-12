@@ -1,6 +1,8 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { FiCreditCard, FiMapPin, FiCheck, FiTruck, FiSmartphone, FiDollarSign } from 'react-icons/fi'
+import { collection, addDoc, serverTimestamp } from 'firebase/firestore'
+import { db } from '../../lib/firebase'
 import toast from 'react-hot-toast'
 import { useCart } from '../../contexts/CartContext'
 import { useAuth } from '../../contexts/AuthContext'
@@ -35,11 +37,44 @@ export default function CheckoutPage() {
 
   const handlePlaceOrder = async () => {
     setLoading(true)
-    await new Promise((r) => setTimeout(r, 1500))
-    const orderId = generateOrderId()
-    clearCart()
-    toast.success(`Order #${orderId} placed successfully!`)
-    navigate('/dashboard?tab=orders')
+    try {
+      const orderId = generateOrderId()
+      await addDoc(collection(db, 'orders'), {
+        orderNumber: orderId,
+        userId: currentUser?.uid || '',
+        userEmail: currentUser?.email || shipping.email,
+        items: items.map((item) => ({
+          productId: item.id,
+          name: item.name,
+          price: item.price,
+          discountedPrice: item.discountedPrice || null,
+          quantity: item.quantity,
+        })),
+        subtotal: items.reduce((sum, item) => sum + (item.price * item.quantity), 0),
+        shipping: 0,
+        discount: 0,
+        total: items.reduce((sum, item) => sum + ((item.discountedPrice || item.price) * item.quantity), 0),
+        paymentMethod,
+        shippingAddress: {
+          firstName: shipping.firstName,
+          lastName: shipping.lastName,
+          address: shipping.address,
+          city: shipping.city,
+          province: shipping.province,
+          zip: shipping.zip,
+          phone: shipping.phone,
+          email: shipping.email,
+        },
+        notes: shipping.notes,
+        status: 'pending',
+        createdAt: serverTimestamp(),
+      })
+      clearCart()
+      toast.success(`Order #${orderId} placed successfully!`)
+      navigate('/dashboard?tab=orders')
+    } catch (err) {
+      toast.error('Failed to place order: ' + err.message)
+    }
     setLoading(false)
   }
 

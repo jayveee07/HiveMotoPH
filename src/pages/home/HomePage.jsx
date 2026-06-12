@@ -1,38 +1,45 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
+import { collection, getDocs, query, orderBy, limit, addDoc } from 'firebase/firestore'
+import { db } from '../../lib/firebase'
 import { FiArrowRight, FiShoppingBag, FiTool, FiShield, FiTruck, FiClock } from 'react-icons/fi'
 import { motion } from 'framer-motion'
 import ProductCard from '../../components/ui/ProductCard'
 import ServiceCard from '../../components/ui/ServiceCard'
 import TestimonialCard from '../../components/ui/TestimonialCard'
 import { SHOP_CATEGORIES, SERVICE_TYPES } from '../../lib/constants'
-
-const featuredProducts = [
-  { id: 'p1', name: 'NGK Spark Plug CR7HSA', brand: 'NGK', price: 180, discountedPrice: 150, images: ['https://placehold.co/400x400/e8b830/1a1a2e?text=Spark+Plug'], rating: 4.5, reviewsCount: 23, stock: 50, category: 'engine' },
-  { id: 'p2', name: 'Mobil 1 Racing 4T 10W-40', brand: 'Mobil', price: 550, discountedPrice: 480, images: ['https://placehold.co/400x400/f26522/fff?text=Engine+Oil'], rating: 4.8, reviewsCount: 45, stock: 100, category: 'lubricants' },
-  { id: 'p3', name: 'Brembo Brake Pads Set', brand: 'Brembo', price: 1200, images: ['https://placehold.co/400x400/1a1a2e/fff?text=Brake+Pads'], rating: 4.7, reviewsCount: 18, stock: 30, category: 'brakes' },
-  { id: 'p4', name: 'DID Heavy Duty Chain Kit', brand: 'DID', price: 2500, discountedPrice: 2200, images: ['https://placehold.co/400x400/e8b830/1a1a2e?text=Chain+Kit'], rating: 4.6, reviewsCount: 12, stock: 20, category: 'engine' },
-  { id: 'p5', name: 'Showa Shock Absorber', brand: 'Showa', price: 3500, images: ['https://placehold.co/400x400/f26522/fff?text=Shock'], rating: 4.4, reviewsCount: 8, stock: 15, category: 'suspension' },
-  { id: 'p6', name: 'Michelin Pilot Street Radial', brand: 'Michelin', price: 4500, discountedPrice: 3800, images: ['https://placehold.co/400x400/1a1a2e/fff?text=Tire'], rating: 4.9, reviewsCount: 34, stock: 25, category: 'tires' },
-  { id: 'p7', name: 'RK Chain 428 Gold', brand: 'RK', price: 1800, images: ['https://placehold.co/400x400/e8b830/1a1a2e?text=RK+Chain'], rating: 4.3, reviewsCount: 15, stock: 40, category: 'engine' },
-  { id: 'p8', name: 'Motul Chain Lube Spray', brand: 'Motul', price: 320, discountedPrice: 280, images: ['https://placehold.co/400x400/f26522/fff?text=Chain+Lube'], rating: 4.7, reviewsCount: 56, stock: 200, category: 'lubricants' },
-]
-
-const testimonials = [
-  { name: 'Juan Dela Cruz', role: 'Motorcycle Enthusiast', rating: 5, text: 'Best motorcycle shop in town! Got my parts delivered in 2 days. Highly recommend HiveMoto PH for all your needs.' },
-  { name: 'Maria Santos', role: 'Daily Rider', rating: 5, text: 'Booked a tune-up service online and it was hassle-free. The mechanics are very professional and knowledgeable.' },
-  { name: 'Pedro Gonzales', role: 'Fleet Owner', rating: 4, text: 'We source all our maintenance parts from HiveMoto. Great prices and reliable delivery for our fleet.' },
-]
-
-const brands = ['Yamaha', 'Honda', 'Kawasaki', 'Suzuki', 'Brembo', 'NGK', 'Michelin', 'Motul']
+import toast from 'react-hot-toast'
 
 export default function HomePage() {
+  const [featuredProducts, setFeaturedProducts] = useState([])
+  const [testimonials, setTestimonials] = useState([])
+  const [brands, setBrands] = useState([])
   const [email, setEmail] = useState('')
 
-  const handleSubscribe = (e) => {
+  useEffect(() => {
+    const fetch = async () => {
+      try {
+        const [productSnap, testimonialSnap, brandSnap] = await Promise.all([
+          getDocs(query(collection(db, 'products'), orderBy('createdAt', 'desc'), limit(8))),
+          getDocs(query(collection(db, 'testimonials'), limit(6))),
+          getDocs(query(collection(db, 'brands'), limit(12))),
+        ])
+        setFeaturedProducts(productSnap.docs.map((d) => ({ id: d.id, ...d.data() })))
+        setTestimonials(testimonialSnap.docs.map((d) => ({ id: d.id, ...d.data() })))
+        setBrands(brandSnap.docs.map((d) => d.data().name || d.id))
+      } catch (err) { console.error('Failed to fetch home data:', err) }
+    }
+    fetch()
+  }, [])
+
+  const handleSubscribe = async (e) => {
     e.preventDefault()
-    alert('Subscribed! Thank you for joining HiveMoto PH.')
-    setEmail('')
+    if (!email) return
+    try {
+      await addDoc(collection(db, 'subscribers'), { email, createdAt: new Date().toISOString() })
+      toast.success('Subscribed! Thank you for joining HiveMoto PH.')
+      setEmail('')
+    } catch (err) { toast.error('Failed to subscribe: ' + err.message) }
   }
 
   return (

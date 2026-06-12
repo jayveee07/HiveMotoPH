@@ -1,10 +1,11 @@
 import { useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useNavigate, useLocation } from 'react-router-dom'
 import { FiSearch, FiShoppingCart, FiUser, FiHeart, FiMenu, FiX, FiSun, FiMoon, FiPackage, FiTool } from 'react-icons/fi'
 import { useAuth } from '../../contexts/AuthContext'
 import { useCart } from '../../contexts/CartContext'
 import { useWishlist } from '../../contexts/WishlistContext'
 import { useTheme } from '../../contexts/ThemeContext'
+import NotificationBell from './NotificationBell'
 
 export default function Navbar() {
   const [mobileOpen, setMobileOpen] = useState(false)
@@ -15,6 +16,8 @@ export default function Navbar() {
   const { wishlist } = useWishlist()
   const { darkMode, toggleTheme } = useTheme()
   const navigate = useNavigate()
+  const location = useLocation()
+  const isAdminPage = location.pathname.startsWith('/admin')
 
   const handleSearch = (e) => {
     e.preventDefault()
@@ -33,39 +36,47 @@ export default function Navbar() {
             <img src="/HiveMoto PH.png" alt="HiveMoto PH" className="h-10 md:h-12 w-auto" />
           </Link>
 
-          <div className="hidden lg:flex items-center gap-8">
-            <Link to="/" className="text-hive-black dark:text-white hover:text-hive-yellow transition-colors font-medium">Home</Link>
-            <Link to="/shop" className="text-hive-black dark:text-white hover:text-hive-yellow transition-colors font-medium">Shop</Link>
-            <Link to="/services" className="text-hive-black dark:text-white hover:text-hive-yellow transition-colors font-medium">Services</Link>
-            <Link to="/contact" className="text-hive-black dark:text-white hover:text-hive-yellow transition-colors font-medium">Contact</Link>
-          </div>
+          {!isAdminPage && (
+            <div className="hidden lg:flex items-center gap-8">
+              <Link to="/" className="text-hive-black dark:text-white hover:text-hive-yellow transition-colors font-medium">Home</Link>
+              <Link to="/shop" className="text-hive-black dark:text-white hover:text-hive-yellow transition-colors font-medium">Shop</Link>
+              <Link to="/services" className="text-hive-black dark:text-white hover:text-hive-yellow transition-colors font-medium">Services</Link>
+              <Link to="/contact" className="text-hive-black dark:text-white hover:text-hive-yellow transition-colors font-medium">Contact</Link>
+            </div>
+          )}
 
           <div className="flex items-center gap-3">
             <button onClick={() => setSearchOpen(!searchOpen)} className="p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors">
               <FiSearch className="text-xl text-hive-black dark:text-white" />
             </button>
 
+            <NotificationBell />
+
             <button onClick={toggleTheme} className="p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors">
               {darkMode ? <FiSun className="text-xl text-hive-yellow" /> : <FiMoon className="text-xl text-hive-black" />}
             </button>
 
-            <Link to="/wishlist" className="relative p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors hidden sm:block">
-              <FiHeart className="text-xl text-hive-black dark:text-white" />
-              {wishlist.length > 0 && (
-                <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs w-5 h-5 rounded-full flex items-center justify-center font-bold">
-                  {wishlist.length}
-                </span>
-              )}
-            </Link>
+            {!isAdminPage && (
+              <Link to="/wishlist" className="relative p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors hidden sm:block">
+                <FiHeart className="text-xl text-hive-black dark:text-white" />
+                {wishlist.length > 0 && (
+                  <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs w-5 h-5 rounded-full flex items-center justify-center font-bold">
+                    {wishlist.length}
+                  </span>
+                )}
+              </Link>
+            )}
 
-            <Link to="/cart" className="relative p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors">
-              <FiShoppingCart className="text-xl text-hive-black dark:text-white" />
-              {cartItemsCount > 0 && (
-                <span className="absolute -top-1 -right-1 bg-hive-orange text-white text-xs w-5 h-5 rounded-full flex items-center justify-center font-bold">
-                  {cartItemsCount}
-                </span>
-              )}
-            </Link>
+            {!isAdminPage && (
+              <Link to="/cart" className="relative p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors">
+                <FiShoppingCart className="text-xl text-hive-black dark:text-white" />
+                {cartItemsCount > 0 && (
+                  <span className="absolute -top-1 -right-1 bg-hive-orange text-white text-xs w-5 h-5 rounded-full flex items-center justify-center font-bold">
+                    {cartItemsCount}
+                  </span>
+                )}
+              </Link>
+            )}
 
             {currentUser ? (
               <div className="relative group">
@@ -92,11 +103,7 @@ export default function Navbar() {
                     <Link to="/dashboard?tab=bookings" className="flex items-center gap-3 px-3 py-2 text-sm text-hive-black dark:text-white hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg">
                       <FiTool /> My Bookings
                     </Link>
-                    {userProfile?.role === 'admin' && (
-                      <Link to="/admin" className="flex items-center gap-3 px-3 py-2 text-sm text-hive-orange hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg">
-                        <FiPackage /> Admin Panel
-                      </Link>
-                    )}
+
                   </div>
                   <div className="p-2 border-t dark:border-gray-700">
                     <button onClick={logout} className="w-full text-left px-3 py-2 text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg">
@@ -141,11 +148,15 @@ export default function Navbar() {
       {mobileOpen && (
         <div className="lg:hidden bg-white dark:bg-hive-dark border-t dark:border-gray-700">
           <div className="px-4 py-3 space-y-2">
-            <Link to="/" onClick={() => setMobileOpen(false)} className="block px-4 py-3 text-hive-black dark:text-white hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg font-medium">Home</Link>
-            <Link to="/shop" onClick={() => setMobileOpen(false)} className="block px-4 py-3 text-hive-black dark:text-white hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg font-medium">Shop</Link>
-            <Link to="/services" onClick={() => setMobileOpen(false)} className="block px-4 py-3 text-hive-black dark:text-white hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg font-medium">Services</Link>
-            <Link to="/wishlist" onClick={() => setMobileOpen(false)} className="block px-4 py-3 text-hive-black dark:text-white hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg font-medium">Wishlist</Link>
-            <Link to="/contact" onClick={() => setMobileOpen(false)} className="block px-4 py-3 text-hive-black dark:text-white hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg font-medium">Contact</Link>
+            {!isAdminPage && (
+              <>
+                <Link to="/" onClick={() => setMobileOpen(false)} className="block px-4 py-3 text-hive-black dark:text-white hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg font-medium">Home</Link>
+                <Link to="/shop" onClick={() => setMobileOpen(false)} className="block px-4 py-3 text-hive-black dark:text-white hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg font-medium">Shop</Link>
+                <Link to="/services" onClick={() => setMobileOpen(false)} className="block px-4 py-3 text-hive-black dark:text-white hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg font-medium">Services</Link>
+                <Link to="/wishlist" onClick={() => setMobileOpen(false)} className="block px-4 py-3 text-hive-black dark:text-white hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg font-medium">Wishlist</Link>
+                <Link to="/contact" onClick={() => setMobileOpen(false)} className="block px-4 py-3 text-hive-black dark:text-white hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg font-medium">Contact</Link>
+              </>
+            )}
             {!currentUser && (
               <div className="flex gap-2 pt-2">
                 <Link to="/login" onClick={() => setMobileOpen(false)} className="btn-primary text-center flex-1 text-sm">Sign In</Link>

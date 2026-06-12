@@ -1,4 +1,6 @@
 import { useState } from 'react'
+import { collection, addDoc, serverTimestamp } from 'firebase/firestore'
+import { db } from '../../lib/firebase'
 import { FiMapPin, FiPhone, FiMail, FiClock, FiSend, FiMessageCircle } from 'react-icons/fi'
 import toast from 'react-hot-toast'
 
@@ -6,14 +8,15 @@ export default function ContactPage() {
   const [form, setForm] = useState({ name: '', email: '', subject: '', message: '' })
   const [loading, setLoading] = useState(false)
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault()
     setLoading(true)
-    setTimeout(() => {
+    try {
+      await addDoc(collection(db, 'contacts'), { ...form, createdAt: serverTimestamp() })
       toast.success('Message sent! We\'ll get back to you soon.')
       setForm({ name: '', email: '', subject: '', message: '' })
-      setLoading(false)
-    }, 1000)
+    } catch (err) { toast.error('Failed to send message: ' + err.message) }
+    setLoading(false)
   }
 
   return (

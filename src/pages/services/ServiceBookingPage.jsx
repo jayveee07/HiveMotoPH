@@ -1,5 +1,8 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { FiTool, FiClock, FiCalendar, FiUser, FiFileText, FiCheck, FiArrowRight } from 'react-icons/fi'
+import { collection, addDoc, serverTimestamp } from 'firebase/firestore'
+import { db } from '../../lib/firebase'
+import { useAuth } from '../../contexts/AuthContext'
 import toast from 'react-hot-toast'
 import ServiceCard from '../../components/ui/ServiceCard'
 import { SERVICE_TYPES } from '../../lib/constants'
@@ -12,6 +15,7 @@ const motorcycleModels = [
 ]
 
 export default function ServiceBookingPage() {
+  const { currentUser, userProfile } = useAuth()
   const [step, setStep] = useState('services')
   const [selectedService, setSelectedService] = useState(null)
   const [booking, setBooking] = useState({
@@ -27,18 +31,50 @@ export default function ServiceBookingPage() {
   })
   const [confirmed, setConfirmed] = useState(null)
 
+  useEffect(() => {
+    if (currentUser) {
+      setBooking((prev) => ({
+        ...prev,
+        firstName: currentUser.displayName?.split(' ')[0] || '',
+        lastName: currentUser.displayName?.split(' ').slice(1).join(' ') || '',
+        email: currentUser.email || '',
+        phone: userProfile?.phone || '',
+      }))
+    }
+  }, [currentUser, userProfile])
+
   const handleSelectService = (service) => {
     setSelectedService(service)
     setStep('form')
     window.scrollTo(0, 0)
   }
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault()
     const bookingId = generateBookingId()
-    setConfirmed({ ...booking, service: selectedService, id: bookingId })
-    setStep('confirmed')
-    toast.success('Booking confirmed!')
+    try {
+      await addDoc(collection(db, 'bookings'), {
+        bookingNumber: bookingId,
+        serviceId: selectedService.id,
+        serviceName: selectedService.name,
+        customerName: `${booking.firstName} ${booking.lastName}`.trim(),
+        email: booking.email,
+        phone: booking.phone,
+        userId: currentUser?.uid || '',
+        motorcycleModel: booking.model,
+        motorcycleYear: Number(booking.year),
+        date: booking.date,
+        time: booking.time,
+        notes: booking.notes,
+        status: 'pending',
+        createdAt: serverTimestamp(),
+      })
+      setConfirmed({ ...booking, service: selectedService, id: bookingId })
+      setStep('confirmed')
+      toast.success('Booking confirmed!')
+    } catch (err) {
+      toast.error('Failed to book: ' + err.message)
+    }
   }
 
   if (step === 'confirmed' && confirmed) {

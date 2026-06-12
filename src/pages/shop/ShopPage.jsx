@@ -1,32 +1,18 @@
-import { useState, useMemo } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useParams, useSearchParams } from 'react-router-dom'
+import { collection, getDocs, query, orderBy } from 'firebase/firestore'
+import { db } from '../../lib/firebase'
 import { FiGrid, FiList, FiSliders, FiX, FiSearch } from 'react-icons/fi'
 import ProductCard from '../../components/ui/ProductCard'
 import { SHOP_CATEGORIES } from '../../lib/constants'
-
-const allProducts = [
-  { id: 'p1', name: 'NGK Spark Plug CR7HSA', brand: 'NGK', price: 180, discountedPrice: 150, images: ['https://placehold.co/400x400/e8b830/1a1a2e?text=Spark+Plug'], rating: 4.5, reviewsCount: 23, stock: 50, category: 'engine', model: 'Honda', createdAt: Date.now() - 100000 },
-  { id: 'p2', name: 'Mobil 1 Racing 4T 10W-40', brand: 'Mobil', price: 550, discountedPrice: 480, images: ['https://placehold.co/400x400/f26522/fff?text=Engine+Oil'], rating: 4.8, reviewsCount: 45, stock: 100, category: 'lubricants', model: 'Universal', createdAt: Date.now() - 20000 },
-  { id: 'p3', name: 'Brembo Brake Pads Set', brand: 'Brembo', price: 1200, images: ['https://placehold.co/400x400/1a1a2e/fff?text=Brake+Pads'], rating: 4.7, reviewsCount: 18, stock: 30, category: 'brakes', model: 'Yamaha', createdAt: Date.now() - 50000 },
-  { id: 'p4', name: 'DID Heavy Duty Chain Kit', brand: 'DID', price: 2500, discountedPrice: 2200, images: ['https://placehold.co/400x400/e8b830/1a1a2e?text=Chain+Kit'], rating: 4.6, reviewsCount: 12, stock: 20, category: 'engine', model: 'Kawasaki', createdAt: Date.now() },
-  { id: 'p5', name: 'Showa Shock Absorber', brand: 'Showa', price: 3500, images: ['https://placehold.co/400x400/f26522/fff?text=Shock'], rating: 4.4, reviewsCount: 8, stock: 15, category: 'suspension', model: 'Honda', createdAt: Date.now() - 30000 },
-  { id: 'p6', name: 'Michelin Pilot Street Radial', brand: 'Michelin', price: 4500, discountedPrice: 3800, images: ['https://placehold.co/400x400/1a1a2e/fff?text=Tire'], rating: 4.9, reviewsCount: 34, stock: 25, category: 'tires', model: 'Universal', createdAt: Date.now() - 1000 },
-  { id: 'p7', name: 'RK Chain 428 Gold', brand: 'RK', price: 1800, images: ['https://placehold.co/400x400/e8b830/1a1a2e?text=RK+Chain'], rating: 4.3, reviewsCount: 15, stock: 40, category: 'engine', model: 'Suzuki', createdAt: Date.now() - 60000 },
-  { id: 'p8', name: 'Motul Chain Lube Spray', brand: 'Motul', price: 320, discountedPrice: 280, images: ['https://placehold.co/400x400/f26522/fff?text=Chain+Lube'], rating: 4.7, reviewsCount: 56, stock: 200, category: 'lubricants', model: 'Universal', createdAt: Date.now() - 40000 },
-  { id: 'p9', name: 'K&N Air Filter', brand: 'K&N', price: 850, images: ['https://placehold.co/400x400/1a1a2e/fff?text=Air+Filter'], rating: 4.5, reviewsCount: 22, stock: 35, category: 'engine', model: 'Honda', createdAt: Date.now() - 70000 },
-  { id: 'p10', name: 'LED Headlight Bulb Kit', brand: 'Philips', price: 650, discountedPrice: 520, images: ['https://placehold.co/400x400/e8b830/1a1a2e?text=LED+Headlight'], rating: 4.6, reviewsCount: 41, stock: 60, category: 'electrical', model: 'Universal', createdAt: Date.now() - 80000 },
-  { id: 'p11', name: 'Givi Top Box 45L', brand: 'Givi', price: 5500, images: ['https://placehold.co/400x400/f26522/fff?text=Top+Box'], rating: 4.8, reviewsCount: 28, stock: 10, category: 'accessories', model: 'Universal', createdAt: Date.now() - 90000 },
-  { id: 'p12', name: 'Battery Yuasa YTX12-BS', brand: 'Yuasa', price: 1500, images: ['https://placehold.co/400x400/1a1a2e/fff?text=Battery'], rating: 4.4, reviewsCount: 19, stock: 25, category: 'electrical', model: 'Yamaha', createdAt: Date.now() - 10000 },
-]
-
-const brands = ['All', 'NGK', 'Mobil', 'Brembo', 'DID', 'Showa', 'Michelin', 'RK', 'Motul', 'K&N', 'Philips', 'Givi', 'Yuasa']
-const models = ['All', 'Universal', 'Honda', 'Yamaha', 'Kawasaki', 'Suzuki']
 
 export default function ShopPage() {
   const { category } = useParams()
   const [searchParams, setSearchParams] = useSearchParams()
   const searchQuery = searchParams.get('search') || ''
 
+  const [allProducts, setAllProducts] = useState([])
+  const [loading, setLoading] = useState(true)
   const [viewMode, setViewMode] = useState('grid')
   const [showFilters, setShowFilters] = useState(false)
   const [filters, setFilters] = useState({
@@ -36,6 +22,20 @@ export default function ShopPage() {
     sortBy: 'newest',
     inStock: false,
   })
+
+  useEffect(() => {
+    const fetch = async () => {
+      try {
+        const snap = await getDocs(query(collection(db, 'products'), orderBy('createdAt', 'desc')))
+        setAllProducts(snap.docs.map((d) => ({ id: d.id, ...d.data() })))
+      } catch (err) { console.error('Failed to fetch products:', err) }
+      setLoading(false)
+    }
+    fetch()
+  }, [])
+
+  const brands = ['All', ...new Set(allProducts.map((p) => p.brand).filter(Boolean))]
+  const models = ['All', ...new Set(allProducts.flatMap((p) => p.compatibleModels || []).filter(Boolean))]
 
   const filtered = useMemo(() => {
     let result = [...allProducts]

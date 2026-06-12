@@ -1,4 +1,4 @@
-import { Routes, Route } from 'react-router-dom'
+import { Routes, Route, Navigate } from 'react-router-dom'
 import Layout from './components/layout/Layout'
 import HomePage from './pages/home/HomePage'
 import ShopPage from './pages/shop/ShopPage'
@@ -13,6 +13,15 @@ import AdminDashboard from './pages/dashboard/AdminDashboard'
 import ServiceBookingPage from './pages/services/ServiceBookingPage'
 import ContactPage from './pages/contact/ContactPage'
 import WishlistPage from './pages/shop/WishlistPage'
+import SetupPage from './pages/SetupPage'
+import { useAuth } from './contexts/AuthContext'
+
+function AdminRoute({ children }) {
+  const { userProfile, loading } = useAuth()
+  if (loading) return null
+  if (!userProfile || userProfile.role !== 'admin') return <Navigate to="/" replace />
+  return children
+}
 
 export default function App() {
   return (
@@ -29,7 +38,8 @@ export default function App() {
         <Route path="register" element={<RegisterPage />} />
         <Route path="forgot-password" element={<ForgotPasswordPage />} />
         <Route path="dashboard" element={<DashboardPage />} />
-        <Route path="admin" element={<AdminDashboard />} />
+        <Route path="admin" element={<AdminRoute><AdminDashboard /></AdminRoute>} />
+        <Route path="admin/setup" element={<AdminRoute><SetupPage /></AdminRoute>} />
         <Route path="services" element={<ServiceBookingPage />} />
         <Route path="contact" element={<ContactPage />} />
       </Route>

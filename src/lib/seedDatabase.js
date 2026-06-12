@@ -1,4 +1,4 @@
-import { collection, doc, setDoc, getDocs, writeBatch, query, limit } from 'firebase/firestore'
+import { collection, doc, setDoc, getDoc, getDocs, writeBatch, query, limit } from 'firebase/firestore'
 import { db } from './firebase'
 import { CATEGORIES, PRODUCTS, SERVICES, COUPONS, TESTIMONIALS, BRANDS, BANNERS, SAMPLE_ORDERS, SAMPLE_BOOKINGS, SITE_SETTINGS } from './seedData'
 
@@ -53,8 +53,47 @@ async function seedCollection(collectionName, items, onProgress) {
   return count
 }
 
-export async function seedAll(onProgress) {
+export async function seedAdminUser(user, onProgress) {
+  if (!user) {
+    onProgress?.('No user provided — skipping admin setup')
+    return { users: 0 }
+  }
+
+  const userRef = doc(db, 'users', user.uid)
+  const userSnap = await getDoc(userRef)
+
+  if (userSnap.exists() && userSnap.data().role === 'admin') {
+    onProgress?.(`User "${user.email}" is already an admin`)
+    return { users: 0 }
+  }
+
+  const data = userSnap.exists()
+    ? { ...userSnap.data(), role: 'admin', updatedAt: new Date().toISOString() }
+    : {
+        uid: user.uid,
+        email: user.email,
+        displayName: user.displayName || '',
+        role: 'admin',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      }
+
+  await setDoc(userRef, data)
+  onProgress?.(`Promoted "${user.email}" to admin`)
+  return { users: 1 }
+}
+
+export async function seedAll(user, onProgress) {
   const results = {}
+
+  try {
+    const adminResult = await seedAdminUser(user, onProgress)
+    Object.assign(results, adminResult)
+  } catch (err) {
+    onProgress?.(`Failed to setup admin: ${err.message}`)
+    results.users = 0
+  }
+
   for (const [name, data] of Object.entries(COLLECTIONS)) {
     try {
       const count = await seedCollection(name, data, onProgress)

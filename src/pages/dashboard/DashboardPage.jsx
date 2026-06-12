@@ -1,20 +1,13 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useSearchParams } from 'react-router-dom'
+import { collection, getDocs, query, where, orderBy, doc, updateDoc } from 'firebase/firestore'
+import { updatePassword } from 'firebase/auth'
+import { db, auth } from '../../lib/firebase'
 import { FiUser, FiShoppingBag, FiTool, FiHeart, FiStar, FiLogOut, FiMapPin, FiPackage, FiClock, FiSettings } from 'react-icons/fi'
 import { useAuth } from '../../contexts/AuthContext'
 import { useWishlist } from '../../contexts/WishlistContext'
 import { formatCurrency, formatDate, getStatusColor } from '../../lib/helpers'
-
-const mockOrders = [
-  { id: 'HMP-A1B2C3', date: '2026-06-01', status: 'delivered', total: 1500, items: 3 },
-  { id: 'HMP-D4E5F6', date: '2026-06-05', status: 'shipped', total: 2800, items: 2 },
-  { id: 'HMP-G7H8I9', date: '2026-06-10', status: 'processing', total: 450, items: 1 },
-]
-
-const mockBookings = [
-  { id: 'BOK-A1B2', service: 'Change Oil', date: '2026-06-15', time: '10:00', status: 'confirmed', model: 'Honda Beat' },
-  { id: 'BOK-C3D4', service: 'CVT Cleaning', date: '2026-06-20', time: '14:00', status: 'pending', model: 'Yamaha Mio' },
-]
+import toast from 'react-hot-toast'
 
 const tabs = [
   { id: 'overview', label: 'Overview', icon: FiPackage },
@@ -32,11 +25,58 @@ export default function DashboardPage() {
   const { currentUser, userProfile, logout } = useAuth()
   const { wishlist } = useWishlist()
 
+  const [orders, setOrders] = useState([])
+  const [bookings, setBookings] = useState([])
+  const [loading, setLoading] = useState(true)
+
   const [profile, setProfile] = useState({
     displayName: userProfile?.displayName || currentUser?.displayName || '',
     email: currentUser?.email || '',
     phone: userProfile?.phone || '',
   })
+  const [passwords, setPasswords] = useState({ current: '', newPass: '', confirm: '' })
+
+  useEffect(() => {
+    const fetch = async () => {
+      if (!currentUser) return
+      try {
+        const [orderSnap, bookingSnap] = await Promise.all([
+          getDocs(query(collection(db, 'orders'), where('userId', '==', currentUser.uid), orderBy('createdAt', 'desc'))),
+          getDocs(query(collection(db, 'bookings'), where('userId', '==', currentUser.uid), orderBy('date', 'desc'))),
+        ])
+        setOrders(orderSnap.docs.map((d) => ({ id: d.id, ...d.data() })))
+        setBookings(bookingSnap.docs.map((d) => ({ id: d.id, ...d.data() })))
+      } catch (err) { console.error('Failed to fetch data:', err) }
+      setLoading(false)
+    }
+    fetch()
+  }, [currentUser])
+
+  const handleProfileSave = async (e) => {
+    e.preventDefault()
+    if (!currentUser) return
+    try {
+      const ref = doc(db, 'users', currentUser.uid)
+      await updateDoc(ref, { displayName: profile.displayName, phone: profile.phone, updatedAt: new Date().toISOString() })
+      toast.success('Profile updated!')
+    } catch (err) { toast.error('Failed to update profile: ' + err.message) }
+  }
+
+  const handlePasswordUpdate = async (e) => {
+    e.preventDefault()
+    if (passwords.newPass !== passwords.confirm) return toast.error('Passwords do not match')
+    if (passwords.newPass.length < 6) return toast.error('Password must be at least 6 characters')
+    try {
+      await updatePassword(auth.currentUser, passwords.newPass)
+      toast.success('Password updated!')
+      setPasswords({ current: '', newPass: '', confirm: '' })
+    } catch (err) { toast.error(err.message) }
+  }
+
+  const activeOrders = orders.filter((o) => ['pending', 'processing', 'shipped'].includes(o.status)).length
+  const upcomingBookings = bookings.filter((b) => ['pending', 'confirmed'].includes(b.status)).length
+
+  if (loading) return <div className="max-w-7xl mx-auto px-4 py-20 text-center text-gray-400">Loading...</div>
 
   return (
     <div className="max-w-7xl mx-auto px-4 py-8">
@@ -75,10 +115,10 @@ export default function DashboardPage() {
             <div className="space-y-6">
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 {[
-                  { label: 'Active Orders', value: '2', icon: FiShoppingBag, color: 'text-blue-600 bg-blue-100' },
-                  { label: 'Upcoming Appointments', value: '2', icon: FiTool, color: 'text-hive-orange bg-orange-100' },
-                  { label: 'Wishlist Items', value: String(wishlist.length || 3), icon: FiHeart, color: 'text-red-500 bg-red-100' },
-                  { label: 'Loyalty Points', value: '250', icon: FiStar, color: 'text-hive-yellow bg-yellow-100' },
+                  { label: 'Active Orders', value: String(activeOrders), icon: FiShoppingBag, color: 'text-blue-600 bg-blue-100' },
+                  { label: 'Upcoming Appointments', value: String(upcomingBookings), icon: FiTool, color: 'text-hive-orange bg-orange-100' },
+                  { label: 'Wishlist Items', value: String(wishlist.length), icon: FiHeart, color: 'text-red-500 bg-red-100' },
+                  { label: 'Total Orders', value: String(orders.length), icon: FiPackage, color: 'text-hive-yellow bg-yellow-100' },
                 ].map((stat, i) => (
                   <div key={i} className="card p-4">
                     <div className={`w-10 h-10 rounded-lg flex items-center justify-center mb-3 ${stat.color}`}>
@@ -92,11 +132,13 @@ export default function DashboardPage() {
 
               <div className="card p-6">
                 <h3 className="font-semibold text-hive-black dark:text-white mb-4">Recent Orders</h3>
-                {mockOrders.slice(0, 3).map((order) => (
+                {orders.length === 0 ? (
+                  <p className="text-gray-500 text-sm">No orders yet.</p>
+                ) : orders.slice(0, 3).map((order) => (
                   <div key={order.id} className="flex items-center justify-between py-3 border-b border-gray-100 dark:border-gray-800 last:border-0">
                     <div>
-                      <p className="font-medium text-sm text-hive-black dark:text-white">{order.id}</p>
-                      <p className="text-xs text-gray-500">{formatDate(order.date)}</p>
+                      <p className="font-medium text-sm text-hive-black dark:text-white">{order.orderNumber || order.id}</p>
+                      <p className="text-xs text-gray-500">{formatDate(order.createdAt?.toDate?.() || order.createdAt)}</p>
                     </div>
                     <div className="text-right">
                       <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(order.status)}`}>{order.status}</span>
@@ -108,11 +150,13 @@ export default function DashboardPage() {
 
               <div className="card p-6">
                 <h3 className="font-semibold text-hive-black dark:text-white mb-4">Upcoming Appointments</h3>
-                {mockBookings.map((booking) => (
+                {bookings.length === 0 ? (
+                  <p className="text-gray-500 text-sm">No bookings yet.</p>
+                ) : bookings.filter((b) => ['pending', 'confirmed'].includes(b.status)).slice(0, 3).map((booking) => (
                   <div key={booking.id} className="flex items-center justify-between py-3 border-b border-gray-100 dark:border-gray-800 last:border-0">
                     <div>
-                      <p className="font-medium text-sm text-hive-black dark:text-white">{booking.service}</p>
-                      <p className="text-xs text-gray-500">{booking.model} - {booking.date} at {booking.time}</p>
+                      <p className="font-medium text-sm text-hive-black dark:text-white">{booking.serviceName}</p>
+                      <p className="text-xs text-gray-500">{booking.motorcycleModel} - {booking.date} at {booking.time}</p>
                     </div>
                     <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(booking.status)}`}>{booking.status}</span>
                   </div>
@@ -124,23 +168,20 @@ export default function DashboardPage() {
           {activeTab === 'orders' && (
             <div className="space-y-4">
               <h2 className="font-heading text-2xl font-bold text-hive-black dark:text-white">My Orders</h2>
-              {mockOrders.map((order) => (
+              {orders.length === 0 ? (
+                <div className="card p-12 text-center text-gray-500"><p>No orders yet.</p></div>
+              ) : orders.map((order) => (
                 <div key={order.id} className="card p-5">
                   <div className="flex items-center justify-between mb-3">
                     <div>
-                      <p className="font-semibold text-hive-black dark:text-white">{order.id}</p>
-                      <p className="text-sm text-gray-500">{formatDate(order.date)}</p>
+                      <p className="font-semibold text-hive-black dark:text-white">{order.orderNumber || order.id}</p>
+                      <p className="text-sm text-gray-500">{formatDate(order.createdAt?.toDate?.() || order.createdAt)}</p>
                     </div>
                     <span className={`px-3 py-1 rounded-full text-xs font-medium ${getStatusColor(order.status)}`}>{order.status}</span>
                   </div>
                   <div className="flex items-center justify-between text-sm">
-                    <span className="text-gray-500">{order.items} item(s)</span>
+                    <span className="text-gray-500">{order.items?.length || 0} item(s)</span>
                     <span className="font-bold text-hive-orange">{formatCurrency(order.total)}</span>
-                  </div>
-                  <div className="flex gap-2 mt-3">
-                    <button className="text-sm text-hive-yellow font-medium hover:underline">View Details</button>
-                    <button className="text-sm text-gray-500 hover:underline">Track Order</button>
-                    <button className="text-sm text-gray-500 hover:underline">Download Invoice</button>
                   </div>
                 </div>
               ))}
@@ -150,23 +191,21 @@ export default function DashboardPage() {
           {activeTab === 'bookings' && (
             <div className="space-y-4">
               <h2 className="font-heading text-2xl font-bold text-hive-black dark:text-white">My Bookings</h2>
-              {mockBookings.map((booking) => (
+              {bookings.length === 0 ? (
+                <div className="card p-12 text-center text-gray-500"><p>No bookings yet.</p></div>
+              ) : bookings.map((booking) => (
                 <div key={booking.id} className="card p-5">
                   <div className="flex items-center justify-between mb-3">
                     <div>
-                      <p className="font-semibold text-hive-black dark:text-white">{booking.service}</p>
-                      <p className="text-sm text-gray-500">{booking.id}</p>
+                      <p className="font-semibold text-hive-black dark:text-white">{booking.serviceName}</p>
+                      <p className="text-sm text-gray-500">{booking.bookingNumber || booking.id}</p>
                     </div>
                     <span className={`px-3 py-1 rounded-full text-xs font-medium ${getStatusColor(booking.status)}`}>{booking.status}</span>
                   </div>
                   <div className="grid grid-cols-2 gap-2 text-sm">
                     <span className="text-gray-500">Date: <span className="font-medium text-hive-black dark:text-white">{booking.date}</span></span>
                     <span className="text-gray-500">Time: <span className="font-medium text-hive-black dark:text-white">{booking.time}</span></span>
-                    <span className="text-gray-500">Model: <span className="font-medium text-hive-black dark:text-white">{booking.model}</span></span>
-                  </div>
-                  <div className="flex gap-2 mt-3">
-                    <button className="text-sm text-hive-yellow font-medium hover:underline">Reschedule</button>
-                    <button className="text-sm text-red-500 hover:underline">Cancel</button>
+                    <span className="text-gray-500">Model: <span className="font-medium text-hive-black dark:text-white">{booking.motorcycleModel}</span></span>
                   </div>
                 </div>
               ))}
@@ -176,7 +215,7 @@ export default function DashboardPage() {
           {activeTab === 'wishlist' && (
             <div className="card p-6">
               <h2 className="font-heading text-2xl font-bold text-hive-black dark:text-white mb-4">My Wishlist</h2>
-              <p className="text-gray-500">You have {wishlist.length || 3} items in your wishlist.</p>
+              <p className="text-gray-500">You have {wishlist.length} items in your wishlist.</p>
               <a href="/wishlist" className="btn-outline inline-block mt-4 text-sm">View Wishlist</a>
             </div>
           )}
@@ -199,7 +238,7 @@ export default function DashboardPage() {
           {activeTab === 'profile' && (
             <div className="card p-6">
               <h2 className="font-heading text-2xl font-bold text-hive-black dark:text-white mb-6">Profile Settings</h2>
-              <form className="space-y-4 max-w-lg">
+              <form onSubmit={handleProfileSave} className="space-y-4 max-w-lg">
                 <div>
                   <label className="block text-sm font-medium mb-2">Full Name</label>
                   <input type="text" value={profile.displayName} onChange={(e) => setProfile({ ...profile, displayName: e.target.value })} className="input-field" />
@@ -217,18 +256,14 @@ export default function DashboardPage() {
 
               <div className="border-t border-gray-200 dark:border-gray-700 mt-8 pt-8">
                 <h3 className="font-semibold text-hive-black dark:text-white mb-4">Change Password</h3>
-                <form className="space-y-4 max-w-lg">
-                  <div>
-                    <label className="block text-sm font-medium mb-2">Current Password</label>
-                    <input type="password" className="input-field" />
-                  </div>
+                <form onSubmit={handlePasswordUpdate} className="space-y-4 max-w-lg">
                   <div>
                     <label className="block text-sm font-medium mb-2">New Password</label>
-                    <input type="password" className="input-field" />
+                    <input type="password" value={passwords.newPass} onChange={(e) => setPasswords({ ...passwords, newPass: e.target.value })} className="input-field" required minLength={6} />
                   </div>
                   <div>
                     <label className="block text-sm font-medium mb-2">Confirm New Password</label>
-                    <input type="password" className="input-field" />
+                    <input type="password" value={passwords.confirm} onChange={(e) => setPasswords({ ...passwords, confirm: e.target.value })} className="input-field" required minLength={6} />
                   </div>
                   <button type="submit" className="btn-primary">Update Password</button>
                 </form>
