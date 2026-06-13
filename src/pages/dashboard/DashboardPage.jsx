@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { useSearchParams, useNavigate } from 'react-router-dom'
 import { collection, getDocs, query, where, orderBy, doc, updateDoc } from 'firebase/firestore'
 import { updatePassword } from 'firebase/auth'
 import { db, auth } from '../../lib/firebase'
@@ -20,6 +20,7 @@ const tabs = [
 ]
 
 export default function DashboardPage() {
+  const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
   const activeTab = searchParams.get('tab') || 'overview'
   const { currentUser, userProfile, logout } = useAuth()
@@ -117,7 +118,7 @@ export default function DashboardPage() {
                 <tab.icon /> {tab.label}
               </button>
             ))}
-            <button onClick={() => { if (window.confirm('Are you sure you want to sign out?')) logout() }} className="w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 mt-2">
+            <button onClick={() => { if (window.confirm('Are you sure you want to sign out?')) { logout(); navigate('/dashboard', { replace: true }) } }} className="w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 mt-2">
               <FiLogOut /> Sign Out
             </button>
           </div>

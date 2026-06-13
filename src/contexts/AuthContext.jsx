@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState, useRef } from 'react'
+import { createContext, useContext, useEffect, useState } from 'react'
 import {
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
@@ -21,8 +21,6 @@ export function AuthProvider({ children }) {
   const [currentUser, setCurrentUser] = useState(null)
   const [userProfile, setUserProfile] = useState(null)
   const [loading, setLoading] = useState(true)
-  const onLogoutRef = useRef(null)
-  const onAdminLoginRef = useRef(null)
 
   async function createUserProfile(user, additionalData = {}) {
     const userRef = doc(db, 'users', user.uid)
@@ -58,13 +56,9 @@ export function AuthProvider({ children }) {
     return signInWithEmailAndPassword(auth, email, password)
   }
 
-  function setOnLogout(cb) { onLogoutRef.current = cb }
-  function setOnAdminLogin(cb) { onAdminLoginRef.current = cb }
-
   async function logout() {
     setUserProfile(null)
-    await signOut(auth)
-    onLogoutRef.current?.()
+    return signOut(auth)
   }
 
   function resetPassword(email) {
@@ -89,11 +83,9 @@ export function AuthProvider({ children }) {
       if (user) {
         const userRef = doc(db, 'users', user.uid)
         const userSnap = await getDoc(userRef)
-        if (userSnap.exists()) {
-          const profile = userSnap.data()
-          setUserProfile(profile)
-          if (profile.role === 'admin') onAdminLoginRef.current?.()
-        }
+          if (userSnap.exists()) {
+            setUserProfile(userSnap.data())
+          }
       } else {
         setUserProfile(null)
       }
@@ -113,8 +105,6 @@ export function AuthProvider({ children }) {
     signInWithGoogle,
     signInWithFacebook,
     createUserProfile,
-    setOnLogout,
-    setOnAdminLogin,
   }
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>

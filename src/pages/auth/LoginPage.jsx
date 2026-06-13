@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { FiMail, FiLock, FiEye, FiEyeOff } from 'react-icons/fi'
 import { FcGoogle } from 'react-icons/fc'
@@ -10,8 +10,13 @@ export default function LoginPage() {
   const [form, setForm] = useState({ email: '', password: '' })
   const [showPassword, setShowPassword] = useState(false)
   const [loading, setLoading] = useState(false)
-  const { login, signInWithGoogle, signInWithFacebook } = useAuth()
+  const { currentUser, userProfile, login, signInWithGoogle, signInWithFacebook } = useAuth()
   const navigate = useNavigate()
+
+  useEffect(() => {
+    if (userProfile?.role === 'admin') navigate('/admin', { replace: true })
+    else if (currentUser) navigate('/', { replace: true })
+  }, [userProfile, currentUser, navigate])
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -19,7 +24,6 @@ export default function LoginPage() {
     try {
       await login(form.email, form.password)
       toast.success('Welcome back!')
-      navigate('/')
     } catch (err) {
       toast.error(err.message.replace('Firebase: ', '').replace(/\(.*\)/, ''))
     }
@@ -30,7 +34,6 @@ export default function LoginPage() {
     try {
       await signInWithGoogle()
       toast.success('Signed in with Google!')
-      navigate('/')
     } catch (err) {
       toast.error(err.message)
     }
@@ -40,7 +43,6 @@ export default function LoginPage() {
     try {
       await signInWithFacebook()
       toast.success('Signed in with Facebook!')
-      navigate('/')
     } catch (err) {
       toast.error(err.message)
     }
