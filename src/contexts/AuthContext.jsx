@@ -21,6 +21,8 @@ export function AuthProvider({ children }) {
   const [currentUser, setCurrentUser] = useState(null)
   const [userProfile, setUserProfile] = useState(null)
   const [loading, setLoading] = useState(true)
+  const onLogoutRef = useRef(null)
+  const onAdminLoginRef = useRef(null)
 
   async function createUserProfile(user, additionalData = {}) {
     const userRef = doc(db, 'users', user.uid)
