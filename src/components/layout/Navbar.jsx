@@ -106,7 +106,7 @@ export default function Navbar() {
 
                   </div>
                   <div className="p-2 border-t dark:border-gray-700">
-                    <button onClick={logout} className="w-full text-left px-3 py-2 text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg">
+                    <button onClick={() => { if (window.confirm('Are you sure you want to sign out?')) logout() }} className="w-full text-left px-3 py-2 text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg">
                       Sign Out
                     </button>
                   </div>
