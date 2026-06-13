@@ -43,10 +43,11 @@ export default function AdminDashboard() {
 
   const fetchDashboardData = async () => {
     try {
-      const [orderSnap, productSnap, userSnap] = await Promise.all([
+      const [orderSnap, productSnap, userSnap, bookingSnap] = await Promise.all([
         getDocs(collection(db, 'orders')),
         getDocs(collection(db, 'products')),
         getDocs(collection(db, 'users')),
+        getDocs(query(collection(db, 'bookings'), orderBy('createdAt', 'desc'))),
       ])
       const allOrders = orderSnap.docs.map((d) => ({ id: d.id, ...d.data() }))
       const allProducts = productSnap.docs.map((d) => ({ id: d.id, ...d.data() }))
@@ -59,6 +60,7 @@ export default function AdminDashboard() {
       })
       setAdminOrders(allOrders)
       setAdminProducts(allProducts)
+      setBookings(bookingSnap.docs.map((d) => ({ id: d.id, ...d.data() })))
     } catch (err) { console.error('Failed to fetch dashboard:', err) }
     setDashLoading(false)
   }
