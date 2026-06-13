@@ -2,6 +2,8 @@ import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { FiTrash2, FiMinus, FiPlus, FiShoppingBag, FiArrowLeft, FiPercent } from 'react-icons/fi'
 import toast from 'react-hot-toast'
+import { collection, query, where, getDocs, limit } from 'firebase/firestore'
+import { db } from '../../lib/firebase'
 import { useCart } from '../../contexts/CartContext'
 import { formatCurrency } from '../../lib/helpers'
 
@@ -9,15 +11,40 @@ export default function CartPage() {
   const { items, subtotal, discount, total, coupon, updateQuantity, removeFromCart, clearCart, applyCoupon, removeCoupon } = useCart()
   const [couponCode, setCouponCode] = useState('')
 
-  const handleApplyCoupon = () => {
-    if (couponCode.toUpperCase() === 'HIVEMOTO10') {
-      applyCoupon({ code: 'HIVEMOTO10', discountType: 'percentage', discountValue: 10 })
-      toast.success('Coupon applied! 10% discount')
-    } else if (couponCode.toUpperCase() === 'RIDER50') {
-      applyCoupon({ code: 'RIDER50', discountType: 'fixed', discountValue: 50 })
-      toast.success('Coupon applied! ₱50 off')
-    } else {
-      toast.error('Invalid coupon code')
+  const handleApplyCoupon = async () => {
+    try {
+      const q = query(collection(db, 'coupons'), where('code', '==', couponCode.toUpperCase()), limit(1))
+      const snap = await getDocs(q)
+      if (snap.empty) {
+        toast.error('Invalid coupon code')
+        setCouponCode('')
+        return
+      }
+      const coupon = { id: snap.docs[0].id, ...snap.docs[0].data() }
+      if (!coupon.isActive) {
+        toast.error('This coupon is no longer active')
+        setCouponCode('')
+        return
+      }
+      if (coupon.expiresAt && new Date(coupon.expiresAt) < new Date()) {
+        toast.error('This coupon has expired')
+        setCouponCode('')
+        return
+      }
+      if (coupon.usageLimit > 0 && (coupon.usedCount || 0) >= coupon.usageLimit) {
+        toast.error('This coupon has reached its usage limit')
+        setCouponCode('')
+        return
+      }
+      if (coupon.minPurchase > 0 && subtotal < coupon.minPurchase) {
+        toast.error(`Minimum purchase of ${formatCurrency(coupon.minPurchase)} required`)
+        setCouponCode('')
+        return
+      }
+      applyCoupon({ code: coupon.code, discountType: coupon.discountType, discountValue: coupon.discountValue })
+      toast.success(`Coupon applied! ${coupon.discountType === 'percentage' ? `${coupon.discountValue}% off` : `${formatCurrency(coupon.discountValue)} off`}`)
+    } catch (err) {
+      toast.error('Failed to apply coupon')
     }
     setCouponCode('')
   }

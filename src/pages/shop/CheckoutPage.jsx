@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { FiCreditCard, FiMapPin, FiCheck, FiTruck, FiSmartphone, FiDollarSign } from 'react-icons/fi'
-import { collection, addDoc, serverTimestamp } from 'firebase/firestore'
+import { collection, addDoc, doc, updateDoc, increment, query, where, getDocs, limit, serverTimestamp } from 'firebase/firestore'
 import { db } from '../../lib/firebase'
 import toast from 'react-hot-toast'
 import { useCart } from '../../contexts/CartContext'
@@ -10,7 +10,7 @@ import { formatCurrency, generateOrderId } from '../../lib/helpers'
 import { PAYMENT_METHODS } from '../../lib/constants'
 
 export default function CheckoutPage() {
-  const { items, total, clearCart } = useCart()
+  const { items, total, discount, coupon, clearCart } = useCart()
   const { currentUser } = useAuth()
   const navigate = useNavigate()
 
@@ -39,7 +39,9 @@ export default function CheckoutPage() {
     setLoading(true)
     try {
       const orderId = generateOrderId()
-      await addDoc(collection(db, 'orders'), {
+      const subtotalCalc = items.reduce((sum, item) => sum + (item.price * item.quantity), 0)
+      const actualTotal = items.reduce((sum, item) => sum + ((item.discountedPrice || item.price) * item.quantity), 0)
+      const orderData = {
         orderNumber: orderId,
         userId: currentUser?.uid || '',
         userEmail: currentUser?.email || shipping.email,
@@ -50,10 +52,11 @@ export default function CheckoutPage() {
           discountedPrice: item.discountedPrice || null,
           quantity: item.quantity,
         })),
-        subtotal: items.reduce((sum, item) => sum + (item.price * item.quantity), 0),
+        subtotal: subtotalCalc,
         shipping: 0,
-        discount: 0,
-        total: items.reduce((sum, item) => sum + ((item.discountedPrice || item.price) * item.quantity), 0),
+        discount,
+        total: actualTotal - discount,
+        couponCode: coupon?.code || null,
         paymentMethod,
         shippingAddress: {
           firstName: shipping.firstName,
@@ -68,7 +71,15 @@ export default function CheckoutPage() {
         notes: shipping.notes,
         status: 'pending',
         createdAt: serverTimestamp(),
-      })
+      }
+      await addDoc(collection(db, 'orders'), orderData)
+      if (coupon?.code) {
+        const q = query(collection(db, 'coupons'), where('code', '==', coupon.code), limit(1))
+        const snap = await getDocs(q)
+        if (!snap.empty) {
+          await updateDoc(doc(db, 'coupons', snap.docs[0].id), { usedCount: increment(1) })
+        }
+      }
       clearCart()
       toast.success(`Order #${orderId} placed successfully!`)
       navigate('/dashboard?tab=orders')

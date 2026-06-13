@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState } from 'react'
+import { createContext, useContext, useEffect, useState, useRef } from 'react'
 import {
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
@@ -56,9 +56,13 @@ export function AuthProvider({ children }) {
     return signInWithEmailAndPassword(auth, email, password)
   }
 
-  function logout() {
+  function setOnLogout(cb) { onLogoutRef.current = cb }
+  function setOnAdminLogin(cb) { onAdminLoginRef.current = cb }
+
+  async function logout() {
     setUserProfile(null)
-    return signOut(auth)
+    await signOut(auth)
+    onLogoutRef.current?.()
   }
 
   function resetPassword(email) {
@@ -84,7 +88,9 @@ export function AuthProvider({ children }) {
         const userRef = doc(db, 'users', user.uid)
         const userSnap = await getDoc(userRef)
         if (userSnap.exists()) {
-          setUserProfile(userSnap.data())
+          const profile = userSnap.data()
+          setUserProfile(profile)
+          if (profile.role === 'admin') onAdminLoginRef.current?.()
         }
       } else {
         setUserProfile(null)
@@ -105,6 +111,8 @@ export function AuthProvider({ children }) {
     signInWithGoogle,
     signInWithFacebook,
     createUserProfile,
+    setOnLogout,
+    setOnAdminLogin,
   }
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>

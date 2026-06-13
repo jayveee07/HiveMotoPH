@@ -1,41 +1,73 @@
 import { useState, useEffect } from 'react'
 import { useParams, Link } from 'react-router-dom'
-import { doc, getDoc, collection, getDocs, query, where, limit } from 'firebase/firestore'
+import { doc, getDoc, collection, getDocs, addDoc, query, where, orderBy, limit } from 'firebase/firestore'
 import { db } from '../../lib/firebase'
-import { FiShoppingCart, FiHeart, FiMinus, FiPlus, FiCheck, FiTruck, FiShield, FiRotateCcw } from 'react-icons/fi'
+import { FiShoppingCart, FiHeart, FiMinus, FiPlus, FiCheck, FiTruck, FiShield, FiRotateCcw, FiStar, FiSend } from 'react-icons/fi'
 import toast from 'react-hot-toast'
 import { useCart } from '../../contexts/CartContext'
 import { useWishlist } from '../../contexts/WishlistContext'
+import { useAuth } from '../../contexts/AuthContext'
 import { formatCurrency } from '../../lib/helpers'
 import ProductCard from '../../components/ui/ProductCard'
 
 export default function ProductDetailsPage() {
   const { id } = useParams()
+  const { currentUser } = useAuth()
   const [product, setProduct] = useState(null)
   const [relatedProducts, setRelatedProducts] = useState([])
+  const [reviews, setReviews] = useState([])
   const [loading, setLoading] = useState(true)
   const [quantity, setQuantity] = useState(1)
   const [selectedImage, setSelectedImage] = useState(0)
   const [activeTab, setActiveTab] = useState('description')
+  const [reviewForm, setReviewForm] = useState({ rating: 5, text: '' })
+  const [submittingReview, setSubmittingReview] = useState(false)
   const { addToCart } = useCart()
   const { isInWishlist, toggleWishlist } = useWishlist()
+
+  const avgRating = reviews.length > 0 ? (reviews.reduce((s, r) => s + r.rating, 0) / reviews.length).toFixed(1) : '0.0'
 
   useEffect(() => {
     const fetch = async () => {
       if (!id) return
       try {
-        const snap = await getDoc(doc(db, 'products', id))
-        if (snap.exists()) {
-          const data = { id: snap.id, ...snap.data() }
+        const [prodSnap, reviewSnap] = await Promise.all([
+          getDoc(doc(db, 'products', id)),
+          getDocs(query(collection(db, 'reviews'), where('productId', '==', id), orderBy('createdAt', 'desc'))),
+        ])
+        if (prodSnap.exists()) {
+          const data = { id: prodSnap.id, ...prodSnap.data() }
           setProduct(data)
           const relatedSnap = await getDocs(query(collection(db, 'products'), where('category', '==', data.category), limit(4)))
           setRelatedProducts(relatedSnap.docs.map((d) => ({ id: d.id, ...d.data() })).filter((p) => p.id !== id))
         }
+        setReviews(reviewSnap.docs.map((d) => ({ id: d.id, ...d.data() })))
       } catch (err) { console.error('Failed to fetch product:', err) }
       setLoading(false)
     }
     fetch()
   }, [id])
+
+  const handleSubmitReview = async (e) => {
+    e.preventDefault()
+    if (!currentUser) { toast.error('Please log in to leave a review'); return }
+    setSubmittingReview(true)
+    try {
+      const data = {
+        productId: id,
+        userId: currentUser.uid,
+        userName: currentUser.displayName || currentUser.email?.split('@')[0] || 'Anonymous',
+        rating: Number(reviewForm.rating),
+        text: reviewForm.text,
+        createdAt: new Date().toISOString(),
+      }
+      const ref = await addDoc(collection(db, 'reviews'), data)
+      setReviews((prev) => [{ id: ref.id, ...data }, ...prev])
+      setReviewForm({ rating: 5, text: '' })
+      toast.success('Review submitted!')
+    } catch (err) { toast.error('Failed to submit review') }
+    setSubmittingReview(false)
+  }
 
   if (loading) return <div className="max-w-7xl mx-auto px-4 py-20 text-center text-gray-400">Loading...</div>
   if (!product) return <div className="max-w-7xl mx-auto px-4 py-20 text-center"><h2 className="text-2xl font-bold mb-4">Product not found</h2><Link to="/shop" className="btn-primary">Back to Shop</Link></div>
@@ -128,7 +160,12 @@ export default function ProductDetailsPage() {
             <div className="text-center"><FiRotateCcw className="text-hive-yellow text-xl mx-auto mb-1" /><p className="text-xs text-gray-600 dark:text-gray-400">30-Day Returns</p></div>
           </div>
 
-          {product.compatibleModels?.length > 0 && (
+          <div className="flex items-center gap-2 mb-4">
+            <div className="flex items-center gap-1">{[...Array(5)].map((_, i) => (<span key={i} className={`text-lg ${i < Math.round(Number(avgRating)) ? 'text-hive-yellow' : 'text-gray-300'}`}>★</span>))}</div>
+            <span className="text-sm text-gray-500">{avgRating} ({reviews.length} reviews)</span>
+          </div>
+
+            {product.compatibleModels?.length > 0 && (
             <div>
               <h3 className="font-semibold text-hive-black dark:text-white mb-2">Compatible Models:</h3>
               <div className="flex flex-wrap gap-2">
@@ -163,20 +200,39 @@ export default function ProductDetailsPage() {
             </table>
           )}
           {activeTab === 'reviews' && (
-            <div className="space-y-4">
-              {product.reviews?.length > 0 ? product.reviews.map((review) => (
-                <div key={review.id} className="p-4 border border-gray-200 dark:border-gray-700 rounded-lg">
-                  <div className="flex items-center justify-between mb-2">
-                    <div className="flex items-center gap-2">
-                      <div className="w-8 h-8 bg-hive-yellow rounded-full flex items-center justify-center text-sm font-bold text-hive-black">{(review.user || '?')[0]}</div>
-                      <span className="font-medium text-hive-black dark:text-white">{review.user}</span>
-                    </div>
-                    <span className="text-xs text-gray-500">{review.date}</span>
+            <div className="space-y-6">
+              {currentUser && (
+                <form onSubmit={handleSubmitReview} className="p-4 border border-gray-200 dark:border-gray-700 rounded-lg">
+                  <h4 className="font-semibold text-hive-black dark:text-white mb-3">Write a Review</h4>
+                  <div className="flex items-center gap-2 mb-3">
+                    <span className="text-sm text-gray-500">Rating:</span>
+                    {[1, 2, 3, 4, 5].map((star) => (
+                      <button key={star} type="button" onClick={() => setReviewForm({ ...reviewForm, rating: star })} className="text-xl focus:outline-none">
+                        <span className={star <= reviewForm.rating ? 'text-hive-yellow' : 'text-gray-300'}>★</span>
+                      </button>
+                    ))}
                   </div>
-                  <div className="flex items-center gap-1 mb-2">{[...Array(5)].map((_, i) => (<span key={i} className={`text-sm ${i < review.rating ? 'text-hive-yellow' : 'text-gray-300'}`}>★</span>))}</div>
-                  <p className="text-gray-600 dark:text-gray-400 text-sm">{review.text}</p>
-                </div>
-              )) : <p className="text-gray-500">No reviews yet.</p>}
+                  <textarea value={reviewForm.text} onChange={(e) => setReviewForm({ ...reviewForm, text: e.target.value })} required placeholder="Share your experience with this product..." rows={3} className="input-field mb-3" />
+                  <button type="submit" disabled={submittingReview} className="btn-primary text-sm flex items-center gap-2">
+                    {submittingReview ? 'Submitting...' : <><FiSend size={14} /> Submit Review</>}
+                  </button>
+                </form>
+              )}
+              <div className="space-y-4">
+                {reviews.length > 0 ? reviews.map((review) => (
+                  <div key={review.id} className="p-4 border border-gray-200 dark:border-gray-700 rounded-lg">
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center gap-2">
+                        <div className="w-8 h-8 bg-hive-yellow rounded-full flex items-center justify-center text-sm font-bold text-hive-black">{(review.userName || '?')[0]}</div>
+                        <span className="font-medium text-hive-black dark:text-white">{review.userName}</span>
+                      </div>
+                      <span className="text-xs text-gray-500">{review.createdAt ? new Date(review.createdAt).toLocaleDateString() : ''}</span>
+                    </div>
+                    <div className="flex items-center gap-1 mb-2">{[...Array(5)].map((_, i) => (<span key={i} className={`text-sm ${i < review.rating ? 'text-hive-yellow' : 'text-gray-300'}`}>★</span>))}</div>
+                    <p className="text-gray-600 dark:text-gray-400 text-sm">{review.text}</p>
+                  </div>
+                )) : <p className="text-gray-500">No reviews yet. Be the first to review!</p>}
+              </div>
             </div>
           )}
         </div>

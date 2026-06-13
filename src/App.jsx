@@ -1,4 +1,5 @@
-import { Routes, Route, Navigate } from 'react-router-dom'
+import { useEffect } from 'react'
+import { Routes, Route, Navigate, useNavigate } from 'react-router-dom'
 import Layout from './components/layout/Layout'
 import HomePage from './pages/home/HomePage'
 import ShopPage from './pages/shop/ShopPage'

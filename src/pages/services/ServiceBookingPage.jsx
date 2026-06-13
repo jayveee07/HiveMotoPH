@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { FiTool, FiClock, FiCalendar, FiUser, FiFileText, FiCheck, FiArrowRight } from 'react-icons/fi'
-import { collection, addDoc, serverTimestamp } from 'firebase/firestore'
+import { collection, addDoc, getDocs, query, where, serverTimestamp } from 'firebase/firestore'
 import { db } from '../../lib/firebase'
 import { useAuth } from '../../contexts/AuthContext'
 import toast from 'react-hot-toast'
@@ -30,6 +30,20 @@ export default function ServiceBookingPage() {
     phone: '',
   })
   const [confirmed, setConfirmed] = useState(null)
+  const [bookedSlots, setBookedSlots] = useState([])
+
+  useEffect(() => {
+    if (booking.date) {
+      const fetchBooked = async () => {
+        try {
+          const q = query(collection(db, 'bookings'), where('date', '==', booking.date))
+          const snap = await getDocs(q)
+          setBookedSlots(snap.docs.filter((d) => d.data().status !== 'cancelled').map((d) => d.data().time).filter(Boolean))
+        } catch { setBookedSlots([]) }
+      }
+      fetchBooked()
+    }
+  }, [booking.date])
 
   useEffect(() => {
     if (currentUser) {
@@ -51,6 +65,10 @@ export default function ServiceBookingPage() {
 
   const handleSubmit = async (e) => {
     e.preventDefault()
+    if (bookedSlots.includes(booking.time)) {
+      toast.error('This time slot is already booked. Please choose another.')
+      return
+    }
     const bookingId = generateBookingId()
     try {
       await addDoc(collection(db, 'bookings'), {
@@ -197,9 +215,14 @@ export default function ServiceBookingPage() {
                         className="input-field"
                       >
                         <option value="">Select time</option>
-                        {timeSlots().map((slot) => (
-                          <option key={slot.value} value={slot.value}>{slot.label}</option>
-                        ))}
+                        {timeSlots().map((slot) => {
+                          const isBooked = bookedSlots.includes(slot.value)
+                          return (
+                            <option key={slot.value} value={slot.value} disabled={isBooked}>
+                              {slot.label}{isBooked ? ' (Booked)' : ''}
+                            </option>
+                          )
+                        })}
                       </select>
                     </div>
                   </div>
@@ -270,7 +293,12 @@ export default function ServiceBookingPage() {
             </div>
 
             <div className="md:col-span-2">
-              <div className="card p-6 sticky top-24">
+              {booking.date && booking.time && bookedSlots.includes(booking.time) && (
+                <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl p-4 mb-4">
+                  <p className="text-sm font-medium text-red-700 dark:text-red-400">This time slot is already booked. Please select another.</p>
+                </div>
+              )}
+          <div className="card p-6 sticky top-24">
                 <h3 className="font-heading text-lg font-bold text-hive-black dark:text-white mb-4">Service Summary</h3>
                 <div className="p-4 bg-hive-yellow/5 rounded-xl mb-4">
                   <div className="w-12 h-12 bg-hive-yellow/10 rounded-xl flex items-center justify-center mb-3">

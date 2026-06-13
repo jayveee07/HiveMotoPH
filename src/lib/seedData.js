@@ -101,3 +101,14 @@ export const SITE_SETTINGS = {
   currency: 'PHP',
   taxRate: 0.12,
 }
+
+export const SAMPLE_REVIEWS = [
+  { id: 'rev-001', productId: 'prod-001', userId: '', userName: 'Juan Dela Cruz', rating: 5, text: 'Great spark plug! My Honda Beat runs smoother than ever.', createdAt: Date.now() - 86400000 * 20 },
+  { id: 'rev-002', productId: 'prod-001', userId: '', userName: 'Pedro Gonzales', rating: 4, text: 'Good quality for the price. Works well on my Click.', createdAt: Date.now() - 86400000 * 15 },
+  { id: 'rev-003', productId: 'prod-002', userId: '', userName: 'Maria Santos', rating: 5, text: 'Best engine oil for the price. My NMAX loves it!', createdAt: Date.now() - 86400000 * 10 },
+  { id: 'rev-004', productId: 'prod-002', userId: '', userName: 'Carlos Mendoza', rating: 4, text: 'Good synthetic oil. Smooth shifting.', createdAt: Date.now() - 86400000 * 8 },
+  { id: 'rev-005', productId: 'prod-003', userId: '', userName: 'Ana Reyes', rating: 5, text: 'Excellent brake pads! Stopping power is impressive.', createdAt: Date.now() - 86400000 * 12 },
+  { id: 'rev-006', productId: 'prod-006', userId: '', userName: 'Ramon Cruz', rating: 5, text: 'Best tires I have used. Great grip on wet roads.', createdAt: Date.now() - 86400000 * 7 },
+  { id: 'rev-007', productId: 'prod-008', userId: '', userName: 'Jose Rizal', rating: 5, text: 'Keeps my chain in top condition. Highly recommend.', createdAt: Date.now() - 86400000 * 5 },
+  { id: 'rev-008', productId: 'prod-010', userId: '', userName: 'Luna Garcia', rating: 4, text: 'Very bright LED bulbs. Easy to install.', createdAt: Date.now() - 86400000 * 3 },
+]

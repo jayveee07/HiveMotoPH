@@ -3,7 +3,7 @@ import { useSearchParams } from 'react-router-dom'
 import { collection, getDocs, query, where, orderBy, doc, updateDoc } from 'firebase/firestore'
 import { updatePassword } from 'firebase/auth'
 import { db, auth } from '../../lib/firebase'
-import { FiUser, FiShoppingBag, FiTool, FiHeart, FiStar, FiLogOut, FiMapPin, FiPackage, FiClock, FiSettings } from 'react-icons/fi'
+import { FiUser, FiShoppingBag, FiTool, FiHeart, FiStar, FiLogOut, FiMapPin, FiPackage, FiClock, FiSettings, FiChevronDown, FiCheck } from 'react-icons/fi'
 import { useAuth } from '../../contexts/AuthContext'
 import { useWishlist } from '../../contexts/WishlistContext'
 import { formatCurrency, formatDate, getStatusColor } from '../../lib/helpers'
@@ -28,6 +28,10 @@ export default function DashboardPage() {
   const [orders, setOrders] = useState([])
   const [bookings, setBookings] = useState([])
   const [loading, setLoading] = useState(true)
+  const [expandedOrder, setExpandedOrder] = useState(null)
+
+  const orderSteps = ['pending', 'processing', 'shipped', 'delivered']
+  const getOrderStepIndex = (status) => orderSteps.indexOf(status)
 
   const [profile, setProfile] = useState({
     displayName: userProfile?.displayName || currentUser?.displayName || '',
@@ -51,6 +55,15 @@ export default function DashboardPage() {
     }
     fetch()
   }, [currentUser])
+
+  const handleCancelOrder = async (orderId) => {
+    if (!window.confirm('Are you sure you want to cancel this order?')) return
+    try {
+      await updateDoc(doc(db, 'orders', orderId), { status: 'cancelled', updatedAt: new Date().toISOString() })
+      setOrders((prev) => prev.map((o) => (o.id === orderId ? { ...o, status: 'cancelled' } : o)))
+      toast.success('Order cancelled')
+    } catch (err) { toast.error('Failed to cancel order') }
+  }
 
   const handleProfileSave = async (e) => {
     e.preventDefault()
@@ -170,21 +183,57 @@ export default function DashboardPage() {
               <h2 className="font-heading text-2xl font-bold text-hive-black dark:text-white">My Orders</h2>
               {orders.length === 0 ? (
                 <div className="card p-12 text-center text-gray-500"><p>No orders yet.</p></div>
-              ) : orders.map((order) => (
+              ) : orders.map((order) => {
+                const isExpanded = expandedOrder === order.id
+                const stepIdx = getOrderStepIndex(order.status)
+                const isCancelled = order.status === 'cancelled'
+                return (
                 <div key={order.id} className="card p-5">
                   <div className="flex items-center justify-between mb-3">
                     <div>
                       <p className="font-semibold text-hive-black dark:text-white">{order.orderNumber || order.id}</p>
                       <p className="text-sm text-gray-500">{formatDate(order.createdAt?.toDate?.() || order.createdAt)}</p>
                     </div>
-                    <span className={`px-3 py-1 rounded-full text-xs font-medium ${getStatusColor(order.status)}`}>{order.status}</span>
+                    <span className={`px-3 py-1 rounded-full text-xs font-medium capitalize ${getStatusColor(order.status)}`}>{order.status}</span>
                   </div>
                   <div className="flex items-center justify-between text-sm">
                     <span className="text-gray-500">{order.items?.length || 0} item(s)</span>
                     <span className="font-bold text-hive-orange">{formatCurrency(order.total)}</span>
                   </div>
+                  <div className="flex items-center gap-3 mt-2">
+                    {['pending', 'processing'].includes(order.status) && (
+                      <button onClick={() => handleCancelOrder(order.id)} className="text-sm text-red-500 hover:underline">Cancel Order</button>
+                    )}
+                    {!isCancelled && (
+                      <button onClick={() => setExpandedOrder(isExpanded ? null : order.id)} className="text-sm text-hive-yellow hover:underline flex items-center gap-1">
+                        Track Order <FiChevronDown className={`transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
+                      </button>
+                    )}
+                  </div>
+                  {isExpanded && !isCancelled && (
+                    <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
+                      <div className="flex items-center justify-between max-w-xl mx-auto">
+                        {orderSteps.map((step, i) => (
+                          <div key={step} className="flex flex-col items-center relative flex-1">
+                            <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold z-10 ${i <= stepIdx ? 'bg-hive-yellow text-hive-black' : 'bg-gray-200 dark:bg-gray-700 text-gray-400'}`}>
+                              {i < stepIdx ? <FiCheck size={14} /> : i + 1}
+                            </div>
+                            <p className={`text-xs mt-1 capitalize text-center ${i <= stepIdx ? 'text-hive-black dark:text-white font-medium' : 'text-gray-400'}`}>{step}</p>
+                            {i < orderSteps.length - 1 && (
+                              <div className={`absolute top-4 left-[calc(50%+16px)] w-[calc(100%-32px)] h-0.5 -translate-y-1/2 ${i < stepIdx ? 'bg-hive-yellow' : 'bg-gray-200 dark:bg-gray-700'}`} />
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {isExpanded && isCancelled && (
+                    <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
+                      <p className="text-sm text-gray-500 text-center">This order has been cancelled.</p>
+                    </div>
+                  )}
                 </div>
-              ))}
+              )})}
             </div>
           )}
 

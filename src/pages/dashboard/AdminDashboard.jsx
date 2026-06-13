@@ -1,11 +1,12 @@
 import { useState, useEffect } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { collection, getDocs, doc, updateDoc, deleteDoc, query, orderBy, where } from 'firebase/firestore'
+import { collection, getDocs, doc, addDoc, updateDoc, deleteDoc, query, orderBy, where } from 'firebase/firestore'
 import { db } from '../../lib/firebase'
 import { FiPackage, FiShoppingCart, FiUsers, FiDollarSign, FiTool, FiTag, FiTruck, FiBarChart2, FiSettings, FiDatabase, FiCheck, FiAlertCircle, FiLoader, FiPlus, FiEdit2, FiTrash2, FiShield, FiUser, FiRefreshCw, FiFilter } from 'react-icons/fi'
 import { useAuth } from '../../contexts/AuthContext'
 import { formatCurrency, getStatusColor } from '../../lib/helpers'
 import { seedAll } from '../../lib/seedDatabase'
+import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from 'recharts'
 
 const tabs = [
   { id: 'overview', label: 'Overview', icon: FiBarChart2 },
@@ -63,6 +64,29 @@ export default function AdminDashboard() {
   }
 
   useEffect(() => { fetchDashboardData() }, [])
+
+  const dailySales = (() => {
+    const days = {}
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date()
+      d.setDate(d.getDate() - i)
+      const k = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+      days[k] = 0
+    }
+    adminOrders.forEach((o) => {
+      const d = o.createdAt?.toDate?.() || new Date(o.createdAt)
+      const k = d.toLocaleDateString?.('en-US', { month: 'short', day: 'numeric' })
+      if (days[k] !== undefined) days[k] += o.total || 0
+    })
+    return Object.entries(days).map(([name, sales]) => ({ name, sales }))
+  })()
+
+  const statusDist = (() => {
+    const counts = {}
+    adminOrders.forEach((o) => { counts[o.status] = (counts[o.status] || 0) + 1 })
+    const colors = { pending: '#f59e0b', processing: '#3b82f6', shipped: '#8b5cf6', delivered: '#22c55e', cancelled: '#ef4444' }
+    return Object.entries(counts).map(([name, value]) => ({ name: name.charAt(0).toUpperCase() + name.slice(1), value, color: colors[name] || '#6b7280' }))
+  })()
 
   const handleSeed = async () => {
     if (seeding) return
@@ -124,6 +148,46 @@ export default function AdminDashboard() {
   const [bookingsFilter, setBookingsFilter] = useState('all')
   const [pendingOrderCount, setPendingOrderCount] = useState(0)
   const pendingCount = bookings.filter((b) => b.status === 'pending').length
+  const [coupons, setCoupons] = useState([])
+  const [couponForm, setCouponForm] = useState({ code: '', discountType: 'percentage', discountValue: '', minPurchase: '', maxDiscount: '', usageLimit: '', expiresAt: '', description: '', isActive: true })
+  const [editingCoupon, setEditingCoupon] = useState(null)
+  const [showCouponForm, setShowCouponForm] = useState(false)
+
+  const fetchCoupons = async () => {
+    try {
+      const snap = await getDocs(query(collection(db, 'coupons'), orderBy('createdAt', 'desc')))
+      setCoupons(snap.docs.map((d) => ({ id: d.id, ...d.data() })))
+    } catch (err) { console.error('Failed to fetch coupons:', err) }
+  }
+
+  const handleSaveCoupon = async (e) => {
+    e.preventDefault()
+    try {
+      const data = {
+        code: couponForm.code.toUpperCase(),
+        discountType: couponForm.discountType,
+        discountValue: Number(couponForm.discountValue),
+        minPurchase: Number(couponForm.minPurchase) || 0,
+        maxDiscount: Number(couponForm.maxDiscount) || 0,
+        usageLimit: Number(couponForm.usageLimit) || 0,
+        usedCount: editingCoupon ? editingCoupon.usedCount || 0 : 0,
+        expiresAt: new Date(couponForm.expiresAt).toISOString(),
+        description: couponForm.description,
+        isActive: couponForm.isActive,
+        updatedAt: new Date().toISOString(),
+      }
+      if (editingCoupon) {
+        await updateDoc(doc(db, 'coupons', editingCoupon.id), data)
+        setCoupons((prev) => prev.map((c) => (c.id === editingCoupon.id ? { ...c, ...data } : c)))
+      } else {
+        data.createdAt = new Date().toISOString()
+        const ref = await addDoc(collection(db, 'coupons'), data)
+        setCoupons((prev) => [{ id: ref.id, ...data }, ...prev])
+      }
+      setShowCouponForm(false)
+      setEditingCoupon(null)
+    } catch (err) { alert('Failed to save coupon: ' + err.message) }
+  }
 
   const fetchBookings = async () => {
     setBookingsLoading(true)
@@ -164,6 +228,7 @@ export default function AdminDashboard() {
   useEffect(() => {
     if (activeTab === 'customers') fetchUsers()
     if (activeTab === 'bookings') fetchBookings()
+    if (activeTab === 'coupons') fetchCoupons()
   }, [activeTab])
 
   const totalSeeded = results ? Object.values(results).reduce((a, b) => a + b, 0) : 0
@@ -232,6 +297,37 @@ export default function AdminDashboard() {
                     <p className="text-sm text-gray-500">{stat.label}</p>
                   </div>
                 ))}
+              </div>
+
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <div className="card p-6">
+                  <h3 className="font-heading text-lg font-bold text-hive-black dark:text-white mb-4">Sales (Last 7 Days)</h3>
+                  <div className="h-64">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={dailySales}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                        <XAxis dataKey="name" tick={{ fontSize: 12 }} />
+                        <YAxis tick={{ fontSize: 12 }} tickFormatter={(v) => `₱${v}`} />
+                        <Tooltip formatter={(v) => formatCurrency(v)} />
+                        <Bar dataKey="sales" fill="#e8b830" radius={[4, 4, 0, 0]} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+                <div className="card p-6">
+                  <h3 className="font-heading text-lg font-bold text-hive-black dark:text-white mb-4">Order Status</h3>
+                  <div className="h-64">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <PieChart>
+                        <Pie data={statusDist} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={80} label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}>
+                          {statusDist.map((e, i) => <Cell key={i} fill={e.color} />)}
+                        </Pie>
+                        <Tooltip />
+                        <Legend />
+                      </PieChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
               </div>
 
               <div className="card p-6">
@@ -661,7 +757,114 @@ export default function AdminDashboard() {
             </div>
           )}
 
-          {(activeTab === 'services' || activeTab === 'coupons' || activeTab === 'inventory') && (
+          {activeTab === 'coupons' && (
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <h2 className="font-heading text-2xl font-bold text-hive-black dark:text-white">Coupon Management</h2>
+                <button onClick={() => { setEditingCoupon(null); setCouponForm({ code: '', discountType: 'percentage', discountValue: '', minPurchase: '', maxDiscount: '', usageLimit: '', expiresAt: '', description: '', isActive: true }); setShowCouponForm(true) }} className="btn-primary text-sm flex items-center gap-2"><FiPlus /> Add Coupon</button>
+              </div>
+
+              {showCouponForm && (
+                <div className="card p-6">
+                  <h3 className="font-heading text-lg font-bold text-hive-black dark:text-white mb-4">{editingCoupon ? 'Edit Coupon' : 'New Coupon'}</h3>
+                  <form onSubmit={handleSaveCoupon} className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium mb-1">Code *</label>
+                      <input type="text" value={couponForm.code} onChange={(e) => setCouponForm({ ...couponForm, code: e.target.value })} required className="input-field" placeholder="e.g. SAVE20" />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium mb-1">Type</label>
+                      <select value={couponForm.discountType} onChange={(e) => setCouponForm({ ...couponForm, discountType: e.target.value })} className="input-field">
+                        <option value="percentage">Percentage (%)</option>
+                        <option value="fixed">Fixed (₱)</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium mb-1">Value *</label>
+                      <input type="number" value={couponForm.discountValue} onChange={(e) => setCouponForm({ ...couponForm, discountValue: e.target.value })} required className="input-field" min={1} />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium mb-1">Min Purchase (₱)</label>
+                      <input type="number" value={couponForm.minPurchase} onChange={(e) => setCouponForm({ ...couponForm, minPurchase: e.target.value })} className="input-field" min={0} />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium mb-1">Max Discount (₱)</label>
+                      <input type="number" value={couponForm.maxDiscount} onChange={(e) => setCouponForm({ ...couponForm, maxDiscount: e.target.value })} className="input-field" min={0} placeholder="0 = unlimited" />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium mb-1">Usage Limit</label>
+                      <input type="number" value={couponForm.usageLimit} onChange={(e) => setCouponForm({ ...couponForm, usageLimit: e.target.value })} className="input-field" min={0} placeholder="0 = unlimited" />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium mb-1">Expires At *</label>
+                      <input type="date" value={couponForm.expiresAt} onChange={(e) => setCouponForm({ ...couponForm, expiresAt: e.target.value })} required className="input-field" />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium mb-1">Active</label>
+                      <select value={couponForm.isActive} onChange={(e) => setCouponForm({ ...couponForm, isActive: e.target.value === 'true' })} className="input-field">
+                        <option value="true">Active</option>
+                        <option value="false">Inactive</option>
+                      </select>
+                    </div>
+                    <div className="md:col-span-3">
+                      <label className="block text-sm font-medium mb-1">Description</label>
+                      <input type="text" value={couponForm.description} onChange={(e) => setCouponForm({ ...couponForm, description: e.target.value })} className="input-field" />
+                    </div>
+                    <div className="md:col-span-3 flex gap-2">
+                      <button type="submit" className="btn-primary">{editingCoupon ? 'Update' : 'Create'} Coupon</button>
+                      <button type="button" onClick={() => setShowCouponForm(false)} className="btn-secondary">Cancel</button>
+                    </div>
+                  </form>
+                </div>
+              )}
+
+              <div className="card overflow-hidden">
+                {coupons.length === 0 ? (
+                  <div className="text-center py-16 text-gray-500"><FiTag className="text-4xl mx-auto mb-3 text-gray-300" /><p>No coupons yet.</p></div>
+                ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="bg-gray-50 dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700">
+                        <th className="text-left py-3 px-4 font-medium text-gray-500">Code</th>
+                        <th className="text-left py-3 px-4 font-medium text-gray-500">Discount</th>
+                        <th className="text-left py-3 px-4 font-medium text-gray-500">Min Purchase</th>
+                        <th className="text-left py-3 px-4 font-medium text-gray-500">Usage</th>
+                        <th className="text-left py-3 px-4 font-medium text-gray-500">Expires</th>
+                        <th className="text-left py-3 px-4 font-medium text-gray-500">Status</th>
+                        <th className="text-right py-3 px-4 font-medium text-gray-500">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {coupons.map((c) => (
+                        <tr key={c.id} className="border-b border-gray-100 dark:border-gray-800">
+                          <td className="py-3 px-4 font-medium text-hive-black dark:text-white">{c.code}</td>
+                          <td className="py-3 px-4">{c.discountType === 'percentage' ? `${c.discountValue}%` : formatCurrency(c.discountValue)}</td>
+                          <td className="py-3 px-4">{c.minPurchase > 0 ? formatCurrency(c.minPurchase) : '—'}</td>
+                          <td className="py-3 px-4 text-xs">{c.usedCount || 0}/{c.usageLimit || '∞'}</td>
+                          <td className="py-3 px-4 text-xs">{c.expiresAt ? new Date(c.expiresAt).toLocaleDateString() : '—'}</td>
+                          <td className="py-3 px-4">
+                            <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium ${c.isActive ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
+                              {c.isActive ? 'Active' : 'Inactive'}
+                            </span>
+                          </td>
+                          <td className="py-3 px-4 text-right">
+                            <div className="flex items-center justify-end gap-1">
+                              <button onClick={() => { setEditingCoupon(c); setCouponForm({ code: c.code, discountType: c.discountType, discountValue: String(c.discountValue), minPurchase: String(c.minPurchase || ''), maxDiscount: String(c.maxDiscount || ''), usageLimit: String(c.usageLimit || ''), expiresAt: c.expiresAt?.split('T')[0] || '', description: c.description || '', isActive: c.isActive }); setShowCouponForm(true) }} className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-800 rounded"><FiEdit2 className="text-gray-500" size={14} /></button>
+                              <button onClick={async () => { if (window.confirm(`Delete coupon "${c.code}"?`)) { await deleteDoc(doc(db, 'coupons', c.id)); setCoupons((prev) => prev.filter((x) => x.id !== c.id)) } }} className="p-1.5 hover:bg-red-50 dark:hover:bg-red-900/20 rounded"><FiTrash2 className="text-red-500" size={14} /></button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {(activeTab === 'services' || activeTab === 'inventory') && (
             <div className="card p-12 text-center">
               <div className="w-16 h-16 bg-gray-100 dark:bg-gray-800 rounded-full flex items-center justify-center mx-auto mb-4">
                 <FiPackage className="text-2xl text-gray-400" />

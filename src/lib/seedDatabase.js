@@ -1,6 +1,6 @@
 import { collection, doc, setDoc, getDoc, getDocs, writeBatch, query, limit } from 'firebase/firestore'
 import { db } from './firebase'
-import { CATEGORIES, PRODUCTS, SERVICES, COUPONS, TESTIMONIALS, BRANDS, BANNERS, SAMPLE_ORDERS, SAMPLE_BOOKINGS, SITE_SETTINGS } from './seedData'
+import { CATEGORIES, PRODUCTS, SERVICES, COUPONS, TESTIMONIALS, BRANDS, BANNERS, SAMPLE_ORDERS, SAMPLE_BOOKINGS, SAMPLE_REVIEWS, SITE_SETTINGS } from './seedData'
 
 const COLLECTIONS = {
   categories: CATEGORIES,
@@ -12,6 +12,7 @@ const COLLECTIONS = {
   banners: BANNERS,
   orders: SAMPLE_ORDERS,
   bookings: SAMPLE_BOOKINGS,
+  reviews: SAMPLE_REVIEWS,
   settings: [SITE_SETTINGS],
 }
 
